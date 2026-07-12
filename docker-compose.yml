@@ -1,0 +1,431 @@
+services:
+
+  # ═══ KAFKA (KRaft, listeners dual) ═══
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: ecommerce-saga-kafka
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:9096,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9096
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "9096:9096"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ecommerce-saga-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: ecommerce-saga-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      DYNAMIC_CONFIG_ENABLED: "true"
+    ports:
+      - "8091:8080"
+    networks:
+      - ecommerce-saga-net
+
+  # ═══ POSTGRESQL: UNA POR SERVICIO ═══
+  postgres-identity:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-identity
+    environment:
+      POSTGRES_DB: identity_db
+      POSTGRES_USER: identity_user
+      POSTGRES_PASSWORD: identity_pass
+    ports:
+      - "5461:5432"
+    volumes:
+      - pg_identity:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U identity_user -d identity_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-catalog:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-catalog
+    environment:
+      POSTGRES_DB: catalog_db
+      POSTGRES_USER: catalog_user
+      POSTGRES_PASSWORD: catalog_pass
+    ports:
+      - "5462:5432"
+    volumes:
+      - pg_catalog:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U catalog_user -d catalog_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-order:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-order
+    environment:
+      POSTGRES_DB: order_db
+      POSTGRES_USER: order_user
+      POSTGRES_PASSWORD: order_pass
+    ports:
+      - "5463:5432"
+    volumes:
+      - pg_order:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U order_user -d order_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-payment:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-payment
+    environment:
+      POSTGRES_DB: payment_db
+      POSTGRES_USER: payment_user
+      POSTGRES_PASSWORD: payment_pass
+    ports:
+      - "5464:5432"
+    volumes:
+      - pg_payment:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U payment_user -d payment_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-inventory:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-inventory
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_pass
+    ports:
+      - "5465:5432"
+    volumes:
+      - pg_inventory:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory_user -d inventory_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-notification:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-notification
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: notification_pass
+    ports:
+      - "5466:5432"
+    volumes:
+      - pg_notification:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user -d notification_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  postgres-saga:
+    image: postgres:16-alpine
+    container_name: ecommerce-saga-pg-saga
+    environment:
+      POSTGRES_DB: saga_db
+      POSTGRES_USER: saga_user
+      POSTGRES_PASSWORD: saga_pass
+    ports:
+      - "5467:5432"
+    volumes:
+      - pg_saga:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saga_user -d saga_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ecommerce-saga-net
+
+  # ═══ INFRAESTRUCTURA SPRING CLOUD ═══
+  config-server:
+    build:
+      context: ./infra/config-server
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-config-server
+    ports:
+      - "8889:8889"
+    volumes:
+      - ./config-repo:/config-repo:ro
+    environment:
+      CONFIG_REPO_LOCATION: file:/config-repo
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8889/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - ecommerce-saga-net
+
+  discovery-server:
+    build:
+      context: ./infra/discovery-server
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-eureka
+    depends_on:
+      config-server:
+        condition: service_healthy
+    ports:
+      - "8762:8762"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8762/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - ecommerce-saga-net
+
+  api-gateway:
+    build:
+      context: ./infra/api-gateway
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-gateway
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:8080/actuator/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    networks:
+      - ecommerce-saga-net
+
+  # ═══ SERVICIOS DE NEGOCIO ═══
+  identity-service:
+    build:
+      context: ./services/identity-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-identity
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-identity:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_IDENTITY: postgres-identity
+      DB_PORT_IDENTITY: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8081:8081"
+    networks:
+      - ecommerce-saga-net
+
+  catalog-service:
+    build:
+      context: ./services/catalog-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-catalog
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-catalog:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_CATALOG: postgres-catalog
+      DB_PORT_CATALOG: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8082:8082"
+    networks:
+      - ecommerce-saga-net
+
+  order-service:
+    build:
+      context: ./services/order-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-order
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-order:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      identity-service:
+        condition: service_started
+      catalog-service:
+        condition: service_started
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_ORDER: postgres-order
+      DB_PORT_ORDER: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8083:8083"
+    networks:
+      - ecommerce-saga-net
+
+  payment-service:
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-payment
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-payment:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_PAYMENT: postgres-payment
+      DB_PORT_PAYMENT: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8084:8084"
+    networks:
+      - ecommerce-saga-net
+
+  inventory-service:
+    build:
+      context: ./services/inventory-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-inventory
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-inventory:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_INVENTORY: postgres-inventory
+      DB_PORT_INVENTORY: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8085:8085"
+    networks:
+      - ecommerce-saga-net
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-notification
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-notification:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_NOTIFICATION: postgres-notification
+      DB_PORT_NOTIFICATION: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8086:8086"
+    networks:
+      - ecommerce-saga-net
+
+  saga-orchestrator-service:
+    build:
+      context: ./services/saga-orchestrator-service
+      dockerfile: Dockerfile
+    container_name: ecommerce-saga-orchestrator
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_healthy
+      postgres-saga:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      CONFIG_SERVER_URL: http://config-server:8889
+      EUREKA_URL: http://discovery-server:8762/eureka
+      DB_HOST_SAGA: postgres-saga
+      DB_PORT_SAGA: 5432
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    ports:
+      - "8087:8087"
+    networks:
+      - ecommerce-saga-net
+
+networks:
+  ecommerce-saga-net:
+    driver: bridge
+
+volumes:
+  pg_identity:
+  pg_catalog:
+  pg_order:
+  pg_payment:
+  pg_inventory:
+  pg_notification:
+  pg_saga:

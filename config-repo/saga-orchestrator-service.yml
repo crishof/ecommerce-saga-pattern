@@ -1,0 +1,13 @@
+server:
+  port: 8087
+
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST_SAGA:localhost}:${DB_PORT_SAGA:5467}/saga_db
+    username: saga_user
+    password: saga_pass
+
+app:
+  saga:
+    timeout-seconds: 30
+    poll-interval-ms: 5000       # cada 5s revisa timeouts

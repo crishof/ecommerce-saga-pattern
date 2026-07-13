@@ -242,5 +242,15 @@ operación de negocio.
 | 20 | [ecommerce-saga-pattern](https://github.com/crishof/ecommerce-saga-pattern) ← *este proyecto* | Saga Pattern con orchestration |
 | 21 | [ecommerce-observability](https://github.com/crishof/ecommerce-observability) | Observabilidad con Prometheus y Grafana |
 
+## Estado del proyecto
+- ✅ Build: 11 JARs BUILD SUCCESS, 23 tests pasando (incl. 9 de SagaStateMachine cubriendo cada transición y la compensación)
+- ✅ 19 containers healthy: 8 apps registradas en Eureka, puertos distintos al 19 (config-server 8889, eureka 8762, kafka 9096, PG 5461-5467)
+- ✅ Saga con orchestration verificada: 15 pedidos con failure-rate=0.15 → 13 COMPLETED / 2 FAILED. Consistencia entre BDs de order/payment/inventory/notification y el orquestador
+- ✅ `GET /api/sagas/{id}` muestra el flujo entero en una query: RESERVE_STOCK✓ → CHARGE_PAYMENT✗ → REFUND_PAYMENT✓ → RELEASE_STOCK✓ → CANCEL_ORDER✓ → NOTIFY_FAILURE✓
+- ✅ Idempotencia con tabla `processed_messages` en todos los consumers
+- ✅ TimeoutScheduler compensa automáticamente sagas colgadas a los 30s
+- ✅ Monto del cobro en `ChargePaymentCommand` (eliminada la proyección local que daba problemas en el 19)
+- 🎯 **Diferencial vs Choreography (19)**: estado de la saga centralizado en `saga_instances` en vez de disperso entre servicios. Debugging trivial (una fila SQL cuenta toda la historia). El orquestador se modifica sin tocar los servicios de negocio
+
 ---
 _Autor: **Cristian Hoffmann** — Proyecto académico Java 25 / Spring Boot 4.1.0._
